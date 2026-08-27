@@ -12,20 +12,27 @@ The repo is organized by engine, with the cross-engine pieces shared:
 - `asset-gen/` — the `asset-gen` skill
 - `engines/babylon.md`, `engines/godot.md`, `engines/bevy.md` — per-engine guides
 
-Engine and host agent are selected at render time:
+Engine and host agent are selected at render time. Linux/macOS use the Bash publisher:
 
 ```bash
 ./publish.sh --engine godot   --agent claude --out ~/game
 ./publish.sh --engine babylon --agent codex  --out ~/game
 ```
 
-Publishing writes `CLAUDE.md` + `.claude/skills/` for Claude Code, or `AGENTS.md` + `.agents/skills/` for Codex, plus the `<engine>.md` guide. Codex `agents/openai.yaml` is generated from the `asset-gen` `SKILL.md` frontmatter.
+Native Windows uses the equivalent PowerShell publisher:
+
+```powershell
+.\publish.ps1 -Engine godot -Agent codex -Out C:\games\game
+.\publish.ps1 -Engine babylon -Agent claude -Out C:\games\browser-game
+```
+
+Publishing writes `CLAUDE.md` + `.claude/skills/` for Claude Code, or `AGENTS.md` + `.agents/skills/` for Codex, plus the `<engine>.md` guide. Codex `agents/openai.yaml` is generated from the `asset-gen` `SKILL.md` frontmatter. The Windows publisher renders host-specific Python commands into the skill (`python` or `py -3`) instead of leaking Unix-only `python3` assumptions into the generated repo.
 
 ## How a run works
 
 The runtime manifest is short: read the brief, build the game, keep durable status in `README.md`, generate assets with `asset-gen`, and follow the engine guide for stack, project sketch, and capture. There is no fixed multi-stage pipeline and no prescribed document protocol — a capable model plans and decomposes the work itself. The two things the manifest fixes are *where durable state lives* (`README.md`, so a run survives compaction) and *that the result is proven from the running game*.
 
-The engine guide carries only what the model can't infer or discover quickly: the project sketch (what stack and layout to stand up), the capture recipe (how to render the running game headlessly), and the handful of silent-failure traps that pass a compile but break at runtime.
+The engine guide carries only what the model can't infer or discover quickly: the project sketch (what stack and layout to stand up), the capture recipe (how to render the running game), and the handful of silent-failure traps that pass a compile but break at runtime. Platform-specific capture belongs in the engine guide: Linux may use Xvfb; native Windows must not.
 
 ## Delivery
 
@@ -35,9 +42,20 @@ The manifest states only this intent; everything about *how to show and capture*
 
 ## Engine Support
 
-- **Godot** — Godot 4 C#/.NET. Scenes are generated at build time by headless `SceneTree` scripts; the guide carries the serialization rules (owner chain, GLB-recursion trap, post-pack validation) and the `--write-movie` + ffmpeg capture recipe.
-- **Bevy** — Rust, current stable Bevy resolved and pinned at build time, ECS scenes spawned `OnEnter`. The guide points the agent at the installed source for current APIs and gives the offscreen `RenderTarget::Image` capture recipe.
-- **Babylon.js** — TypeScript/Vite, served at a live URL. The guide covers the side-effect-import trap, Havok physics, and headless Chrome capture.
+- **Godot** — Godot 4 C#/.NET. Scenes are generated at build time by headless `SceneTree` scripts; the guide carries the serialization rules (owner chain, GLB-recursion trap, post-pack validation) and platform-specific `--write-movie` + ffmpeg capture recipes. Windows validates and runs the installed native Godot .NET executable directly; Linux may use Xvfb when no display is available.
+- **Bevy** — Rust, current stable Bevy resolved and pinned at build time, ECS scenes spawned `OnEnter`. The guide points the agent at the installed source for current APIs and gives the offscreen `RenderTarget::Image` capture recipe with both POSIX and PowerShell command forms.
+- **Babylon.js** — TypeScript/Vite, served at a live URL. The guide covers the side-effect-import trap, Havok physics, browser GPU verification, and native Windows browser capture without Xvfb.
+
+## Windows support model
+
+Windows support is native rather than WSL-based:
+
+1. Run `scripts/windows-preflight.ps1` to verify Python, .NET, Codex, Godot .NET, and optional capture tools.
+2. Run `publish.ps1` from PowerShell to create the game repo.
+3. Start Codex from that generated repo so it inherits the same `PATH` that exposes `godot` and `dotnet`.
+4. The generated engine/asset instructions select Windows-native shell and capture commands.
+
+A desktop Godot shortcut is not sufficient. The `godot` CLI used by Codex must resolve to the .NET/Mono build, and the real executable must retain access to its neighboring `GodotSharp` directory. The preflight diagnoses the common portable/WinGet failure where a Godot alias launches but `.NET: Assemblies not found` is reported.
 
 ## What Makes This Different
 
@@ -47,7 +65,7 @@ The manifest states only this intent; everything about *how to show and capture*
 
 **Cost-aware asset generation.** Gemini, Grok, and Tripo3D are used where they make economic sense — the agent confirms costs with the user before generating, and the asset manifest in `README.md` tracks paths, in-game sizes, and costs so implementation doesn't lose them.
 
-**One source, many targets.** Engine and host agent are render-time choices over one source tree.
+**One source, many targets.** Engine and host agent are render-time choices over one source tree, with native publishers for POSIX and Windows hosts.
 
 ## Runtime Limitations
 

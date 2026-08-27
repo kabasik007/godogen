@@ -2,6 +2,17 @@
 
 Stack: **Godot 4 (.NET / Mono build)**, **C#**. All Godot C# classes must be `partial`.
 
+## Host and toolchain gate
+
+Before scaffolding or editing, verify the exact host toolchain instead of assuming Linux paths or remembered Godot versions:
+
+```text
+godot --version
+dotnet --version
+```
+
+`godot --version` must report the .NET/Mono build. On native Windows, use the `godot` executable visible to the PowerShell session that launched the agent; do **not** switch to WSL just to run Godot, and do not prepend `xvfb-run` to Windows commands. If `godot` is missing from `PATH`, stop engine validation and report that setup problem explicitly rather than pretending the project was run.
+
 ## Project shape
 
 - `project.godot` — config, input actions, display, physics. **Match version-sensitive fields to the installed toolchain** (`config_version`, and in `.csproj` the `Godot.NET.Sdk/...` version + `TargetFramework`) — run `godot --version` / `dotnet --version` and don't hardcode values from memory; on an existing project preserve them. For 3D, set `3d/physics_engine="Jolt Physics"` and a fixed `physics_ticks_per_second`.
@@ -51,16 +62,39 @@ Most Godot behavior the model already knows; these few fail with no error:
 
 ## Capture (proof video)
 
-Hardware **Vulkan** gives correct rendering and is required for video; software Vulkan (`llvmpipe`/`lavapipe`) can still do stills but skip video and report it.
+Hardware **Vulkan** gives correct rendering and is required for video. Software Vulkan (`llvmpipe`/`lavapipe`) can still do stills but skip video and report it. The capture script must drive input deterministically; do not rely on live keyboard state.
 
-Capture deterministically with Godot's movie writer from a dedicated capture `SceneTree` script under `test/`:
+First import on every platform:
+
+```text
+godot --headless --import
+```
+
+### Linux
+
+Use Xvfb only on Linux when a display is unavailable:
 
 ```bash
-# under xvfb-run -a -s '-screen 0 1920x1080x24' on a headless Linux box; prefer the hardware Vulkan ICD
-godot --headless --import
-godot --write-movie screenshots/result/frame.png --fixed-fps 30 --quit-after 450 --script test/Presentation.cs
-ffmpeg -y -framerate 30 -pattern_type glob -i 'screenshots/result/frame*.png' \
-  -c:v libx264 -pix_fmt yuv420p -movflags +faststart screenshots/result/video.mp4
+xvfb-run -a -s '-screen 0 1920x1080x24' godot --write-movie screenshots/result/frame.png --fixed-fps 30 --quit-after 450 --script test/Presentation.cs
+ffmpeg -y -framerate 30 -pattern_type glob -i 'screenshots/result/frame*.png' -c:v libx264 -pix_fmt yuv420p -movflags +faststart screenshots/result/video.mp4
 ```
+
+Prefer the hardware Vulkan ICD on GPU hosts. If the host only exposes software Vulkan, still-image verification is acceptable; report that video proof was skipped rather than claiming a hardware render.
+
+### Windows (native PowerShell)
+
+Do **not** use Xvfb or WSL. Create the output directory and run the installed Windows Godot .NET executable directly:
+
+```powershell
+New-Item -ItemType Directory -Force screenshots\result | Out-Null
+godot --write-movie screenshots/result/frame.png --fixed-fps 30 --quit-after 450 --script test/Presentation.cs
+ffmpeg -y -framerate 30 -pattern_type glob -i "screenshots/result/frame*.png" -c:v libx264 -pix_fmt yuv420p -movflags +faststart screenshots/result/video.mp4
+```
+
+If the movie run exits immediately, first re-run `godot --headless --quit` and `dotnet build` to distinguish a toolchain failure from a capture failure. If the output is blank or extremely slow on a machine with a real GPU, inspect the renderer/driver instead of falling back to Linux-only display workarounds.
+
+### macOS
+
+Run the same Godot movie command directly from Terminal without Xvfb, then encode with ffmpeg.
 
 `--fixed-fps` makes motion deterministic (450 frames @30fps = 15s). **Pre-position the camera** in the builder/`_Initialize` (the first movie frame renders before `_Process`). Drive capture-time input from the script, not live keys. The clip must show the behavior progressing across the whole window — no dead time, no single looped frame.

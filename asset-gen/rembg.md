@@ -17,13 +17,14 @@ Pick a prompt bg color that is (1) **distinct from the subject** so the mask sep
 
 ## CLI
 
-Deps in `${ASSET_GEN_SKILL_DIR}/tools/requirements.txt` (`pip install rembg[gpu,cli]`, or `rembg[cpu,cli]`). The script auto-detects CUDA and falls back to CPU with a warning.
+Deps are in `${ASSET_GEN_SKILL_DIR}/tools/requirements.txt`. The script auto-detects CUDA and falls back to CPU with a warning.
 
-```bash
+```text
 # single image — always pass --preview
-python3 ${ASSET_GEN_SKILL_DIR}/tools/rembg_matting.py img/car.png -o img/car_nobg.png --preview
+${PYTHON_CMD} ${ASSET_GEN_SKILL_DIR}/tools/rembg_matting.py img/car.png -o img/car_nobg.png --preview
+
 # batch (video frames): BiRefNet loads once, bg sampled per-frame for color drift
-python3 ${ASSET_GEN_SKILL_DIR}/tools/rembg_matting.py --batch frames/ -o clean/
+${PYTHON_CMD} ${ASSET_GEN_SKILL_DIR}/tools/rembg_matting.py --batch frames/ -o clean/
 ```
 
 ## Modes

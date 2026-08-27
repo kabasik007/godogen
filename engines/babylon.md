@@ -24,11 +24,15 @@ Havok is available via `@babylonjs/havok`. Serve `HavokPhysics.wasm` from `publi
 
 ## Capture (self-verify + proof video)
 
-Load the running dev URL in headless Chrome/Chromium (`playwright-core`, or `google-chrome --headless`) and screenshot. This is how you verify your own work and how you produce the proof video.
+Load the running dev URL in Chrome/Chromium through `playwright-core` or the installed browser and screenshot. This is how you verify your own work and how you produce the proof video.
 
-- **Use a real GPU.** Headless Chrome silently falls back to SwiftShader/llvmpipe, which renders slowly or blank. On Linux, run under `xvfb-run` and request hardware (`--use-angle=vulkan`); read the WebGL `RENDERER` string and warn if it contains `swiftshader`/`llvmpipe`/`lavapipe`.
+- **Use a real GPU.** Headless Chrome can silently fall back to SwiftShader/llvmpipe, which renders slowly or blank. Read the WebGL `RENDERER` string and warn if it contains `swiftshader`/`llvmpipe`/`lavapipe`.
+- **Linux:** on a headless host, run the browser under `xvfb-run` and request hardware (`--use-angle=vulkan`) when appropriate.
+- **Windows:** run the installed Chrome/Edge executable directly; do not use Xvfb or WSL. Discover it with PowerShell (`Get-Command chrome`, `Get-Command msedge`) or use the known absolute browser path in the capture script. Preserve hardware acceleration instead of forcing software rendering just to make headless mode start.
 - **Wait before shooting.** Capture only after the scene has rendered a frame and textures/GLBs have loaded — gate on a ready flag the game sets, or settle a fixed delay after network idle. Screenshotting too early gives a misleading blank frame.
 - **Proof video:** screenshot on an interval (~30fps for 15–20s) into a temp dir, then encode at ~720p: `ffmpeg -framerate 30 -i frame_%04d.png -c:v libx264 -pix_fmt yuv420p proof.mp4`.
+
+On Windows PowerShell, make temp/output directories with `New-Item -ItemType Directory -Force`; do not emit Bash-only `mktemp`, `export`, or command-substitution syntax into the generated project workflow.
 
 ## Babylon API lookups
 

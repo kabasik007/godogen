@@ -1,0 +1,95 @@
+name: Windows publisher smoke
+
+on:
+  push:
+    paths:
+      - "publish.ps1"
+      - "publish.sh"
+      - "scripts/**"
+      - "asset-gen/**"
+      - "engines/**"
+      - ".github/workflows/windows-smoke.yml"
+  pull_request:
+    paths:
+      - "publish.ps1"
+      - "publish.sh"
+      - "scripts/**"
+      - "asset-gen/**"
+      - "engines/**"
+      - ".github/workflows/windows-smoke.yml"
+
+jobs:
+  windows-publisher:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Parse PowerShell scripts
+        shell: pwsh
+        run: |
+          $files = @("publish.ps1", "scripts/windows-preflight.ps1")
+          foreach ($file in $files) {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path $file),
+              [ref]$tokens,
+              [ref]$errors
+            ) | Out-Null
+
+            if ($errors.Count -gt 0) {
+              $errors | ForEach-Object { Write-Error "${file}: $($_.Message)" }
+              throw "PowerShell parse failed: $file"
+            }
+          }
+
+      - name: Compile Python helpers
+        shell: pwsh
+        run: |
+          python -m py_compile `
+            scripts/render_dir.py `
+            scripts/generate_codex_metadata.py `
+            asset-gen/tools/rembg_matting.py
+
+      - name: Publish Godot Codex runtime
+        shell: pwsh
+        run: |
+          $target = Join-Path $env:RUNNER_TEMP "godogen-windows-smoke"
+          .\publish.ps1 -Engine godot -Agent codex -Out $target
+
+          $required = @(
+            (Join-Path $target "AGENTS.md"),
+            (Join-Path $target "godot.md"),
+            (Join-Path $target ".gitignore"),
+            (Join-Path $target ".agents/skills/asset-gen/SKILL.md"),
+            (Join-Path $target ".agents/skills/asset-gen/rembg.md"),
+            (Join-Path $target ".agents/skills/asset-gen/agents/openai.yaml")
+          )
+
+          foreach ($path in $required) {
+            if (-not (Test-Path -LiteralPath $path)) {
+              throw "Missing published file: $path"
+            }
+          }
+
+          $skill = Get-Content (Join-Path $target ".agents/skills/asset-gen/SKILL.md") -Raw
+          $rembg = Get-Content (Join-Path $target ".agents/skills/asset-gen/rembg.md") -Raw
+          if ($skill.Contains('${PYTHON_CMD}') -or $rembg.Contains('${PYTHON_CMD}')) {
+            throw "PYTHON_CMD token was not rendered for Windows"
+          }
+          if ($skill.Contains('${ASSET_GEN_SKILL_DIR}') -or $skill.Contains('${RUNTIME_ASSET_DIR}')) {
+            throw "Asset skill still contains unresolved runtime tokens"
+          }
+
+          Set-Content -LiteralPath (Join-Path $target "force-sentinel.txt") -Value "remove me"
+          .\publish.ps1 -Engine godot -Agent codex -Out $target -Force
+          if (Test-Path -LiteralPath (Join-Path $target "force-sentinel.txt")) {
+            throw "-Force did not clean the target"
+          }

@@ -2,7 +2,7 @@
 
 Stack: **current stable Bevy**, Rust (edition 2024). Run `cargo add bevy` to resolve the latest stable release (skip any `-rc` prerelease), pin the exact version it writes, and keep every `bevy_*` crate on that same minor — mismatched minors pull two copies of bevy into the dependency tree and their types stop unifying.
 
-> Whatever minor you land on is likely newer than this model's training data, so APIs may have changed under you. **Verify shapes against the installed version** rather than from memory: read the source under `~/.cargo/registry/src/.../bevy-*`, run `cargo doc --open`, or grep the crate. When a runtime log names a missing feature or a moved item, trust it over recollection.
+> Whatever minor you land on is likely newer than this model's training data, so APIs may have changed under you. **Verify shapes against the installed version** rather than from memory: read the installed Cargo registry source, run `cargo doc --open`, or grep the crate. On Windows the registry normally lives under `%USERPROFILE%\.cargo\registry\src`; on Unix it is under `~/.cargo/registry/src`. When a runtime log names a missing feature or a moved item, trust it over recollection.
 
 ## Project shape
 
@@ -31,21 +31,33 @@ A few things that have bitten real builds and won't error at compile time — ch
 
 ## Capture (proof video)
 
-Do **not** record the windowed binary — on headless Linux the primary-window path panics under virtual X even when it runs fine on a desktop. Use a **dedicated offscreen capture binary** (`src/bin/capture.rs`) in the same crate that reuses the real scene code but renders to a `RenderTarget::Image`:
+Do **not** record the ordinary windowed binary on a headless Linux server — the primary-window path can panic under virtual X even when it runs fine on a desktop. Use a **dedicated offscreen capture binary** (`src/bin/capture.rs`) in the same crate that reuses the real scene code but renders to a `RenderTarget::Image`. The same offscreen binary also works on native Windows and avoids desktop/window automation.
 
 - `DefaultPlugins` with `WindowPlugin { primary_window: None, exit_condition: DontExit }`, `WinitPlugin` disabled, and `ScheduleRunnerPlugin` as the runner.
 - Allocate the target `Image` **directly in the world** (`world_mut().resource_mut::<Assets<Image>>()`) and publish its handle *before* the camera/`OnEnter` systems read it — adding it via `Commands` in `Startup` is deferred and yields black captures.
 - Point the scene camera at `RenderTarget::Image(handle)`; capture with `Screenshot::image(handle).observe(save_to_disk(path))`. Saving is async — exit on a latched completion or an absolute finish tick recorded once, not `current_tick + delay`.
 - Use `TimeUpdateStrategy::ManualDuration(1/30s)` so motion is deterministic across saved frames, and drive capture-time action from the script, not live input.
-- Run it from the crate root (`cargo run --bin capture -- ...`) so `AssetServer` resolves `assets/` from the CWD. Quiet the logs with `RUST_LOG=warn` and a unique `[capture]` marker.
+- Run it from the crate root (`cargo run --bin capture -- ...`) so `AssetServer` resolves `assets/` from the CWD. Quiet the logs with `RUST_LOG=warn` (or `$env:RUST_LOG = "warn"` in PowerShell) and a unique `[capture]` marker.
+
+POSIX shell:
 
 ```bash
 RESULT=screenshots/result/0
-cargo run --bin capture -- frames "$RESULT" 450     # 450 frames @30fps = 15s
-ffmpeg -y -framerate 30 -i "$RESULT/frame%05d.png" \
-  -c:v libx264 -pix_fmt yuv420p -movflags +faststart "$RESULT/video.mp4"
+RUST_LOG=warn cargo run --bin capture -- frames "$RESULT" 450
+ffmpeg -y -framerate 30 -i "$RESULT/frame%05d.png" -c:v libx264 -pix_fmt yuv420p -movflags +faststart "$RESULT/video.mp4"
 ```
 
-Software Vulkan (`llvmpipe`) is acceptable for capture — just slower. The clip must show the behavior progressing across its full length: varied action, no dead time, no single looped frame.
+Windows PowerShell:
+
+```powershell
+$Result = "screenshots/result/0"
+New-Item -ItemType Directory -Force $Result | Out-Null
+$env:RUST_LOG = "warn"
+cargo run --bin capture -- frames $Result 450
+ffmpeg -y -framerate 30 -i "$Result/frame%05d.png" -c:v libx264 -pix_fmt yuv420p -movflags +faststart "$Result/video.mp4"
+Remove-Item Env:RUST_LOG -ErrorAction SilentlyContinue
+```
+
+Software Vulkan (`llvmpipe`) is acceptable for capture — just slower. On Windows, use the native graphics driver and do not introduce Xvfb/WSL into the capture path. The clip must show the behavior progressing across its full length: varied action, no dead time, no single looped frame.
 
 Bevy's `headless_renderer` and `screenshot` examples show the exact offscreen-render and still-capture wiring — read them from the Bevy repo for the current API.

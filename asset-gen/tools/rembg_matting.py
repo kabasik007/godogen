@@ -235,7 +235,7 @@ def make_qa_preview(rgba: np.ndarray, output_path: Path,
 
 def process_batch(input_dir: Path, output_dir: Path, regime: str = "auto",
                   bg_thresh: float | None = None, fg_thresh: float | None = None):
-    """Process all PNGs in input_dir with shared BiRefNet session and BG color."""
+    """Process all PNGs in input_dir with a shared BiRefNet session."""
     output_dir.mkdir(parents=True, exist_ok=True)
     frames = sorted(input_dir.glob("*.png"))
     if not frames:
@@ -296,9 +296,13 @@ def main():
     h, w = img.shape[:2]
     print(f"Image: {w}x{h} ({input_path})")
 
-    # Process
+    # Process. Keep the sampled color so --preview uses the same background
+    # reference that the matting pass used instead of relying on an out-of-scope
+    # local from remove_background().
+    bg_color = sample_bg_color(img)
     out = remove_background(img, img_pil, regime=args.mode,
-                            bg_thresh=args.bg_thresh, fg_thresh=args.fg_thresh)
+                            bg_thresh=args.bg_thresh, fg_thresh=args.fg_thresh,
+                            bg_color_override=bg_color)
 
     # Save
     Image.fromarray(out).save(output_path)

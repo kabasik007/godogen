@@ -12,6 +12,8 @@ description: |
 
 Generate PNG images (Gemini or xAI Grok) and GLB 3D models (Tripo3D) from text prompts. These are paid APIs — every call costs real money. Tools live at `${ASSET_GEN_SKILL_DIR}/tools/`; run from the project root and keep runtime-loaded outputs under `${RUNTIME_ASSET_DIR}/`.
 
+The publisher substitutes `${PYTHON_CMD}` with the host's usable Python command (`python3` on the Unix publisher, `python` or `py -3` on Windows). Do not replace it with a platform-specific command from memory.
+
 ## Models
 
 | Model | Flag | Cost | Best for |
@@ -23,16 +25,15 @@ Grok produces great-looking output but often ignores specific instructions; reac
 
 ## Images
 
-```bash
-python3 ${ASSET_GEN_SKILL_DIR}/tools/asset_gen.py image \
-  --prompt "the full prompt" -o ${RUNTIME_ASSET_DIR}/img/car.png
+```text
+${PYTHON_CMD} ${ASSET_GEN_SKILL_DIR}/tools/asset_gen.py image --prompt "the full prompt" -o ${RUNTIME_ASSET_DIR}/img/car.png
 ```
 
 `--model` (default `grok`) · `--size` (default `1K`; Gemini also `512`/`4K`) · `--aspect-ratio` (default `1:1`; also `16:9`, `9:16`, `4:3`, `3:4`, `3:2`, `2:3`).
 
 **Image-to-image:** pass `--image ref.png` and the model sees the reference — prompt only for what changes (angle, pose, recolor), don't re-describe appearance. Use this for style families (one hero asset → the rest), variants, and multi-view sets.
 
-**Small sprites:** minimum generation is 1K, so a 1024px image downscaled to 64px looks muddy. Design display sizes ≥128px, or generate a kit (multiple objects in one 1K image) and slice it with `tools/grid_slice.py ... --grid 2x2 --names "a,b,c,d"`, or prompt for bold flat forms that survive downscaling.
+**Small sprites:** minimum generation is 1K, so a 1024px image downscaled to 64px looks muddy. Design display sizes ≥128px, or generate a kit (multiple objects in one 1K image) and slice it with `${PYTHON_CMD} ${ASSET_GEN_SKILL_DIR}/tools/grid_slice.py ... --grid 2x2 --names "a,b,c,d"`, or prompt for bold flat forms that survive downscaling.
 
 Review every PNG before any GLB conversion — a bad image wastes 30¢+ downstream.
 
@@ -48,19 +49,20 @@ Recipe: **reference → pose → video → extract frames → loop-trim → remb
 2. Pose per action: image-to-image from the reference, prompt only the action.
 3. Video from the pose frame: `asset_gen.py video --image pose.png --duration 2 -o walk.mp4` (`--duration` 1–15s, `--resolution` 720p; cost 5¢/s).
 4. Extract: `ffmpeg -i walk.mp4 -vsync 0 frames/%04d.png`.
-5. Loop-trim looping cycles (walk/idle): `tools/find_loop_frame.py frames/` returns the loop frame; delete frames past it. Skip for one-shots (attack/death).
-6. Batch matte: `tools/rembg_matting.py --batch frames/ -o clean/`.
+5. Loop-trim looping cycles (walk/idle): `${PYTHON_CMD} ${ASSET_GEN_SKILL_DIR}/tools/find_loop_frame.py frames/` returns the loop frame; delete frames past it. Skip for one-shots (attack/death).
+6. Batch matte: `${PYTHON_CMD} ${ASSET_GEN_SKILL_DIR}/tools/rembg_matting.py --batch frames/ -o clean/`.
 
 Reuse one reference for all of a character's actions. **Chaining** (feed action A's last frame as action B's start) keeps positional continuity — keep chains ≤2 deep, they drift.
 
 ## 3D models
 
-```bash
-python3 ${ASSET_GEN_SKILL_DIR}/tools/asset_gen.py glb  --image ref.png -o model.glb     # 30¢ default / 60¢ --quality hd
-python3 ${ASSET_GEN_SKILL_DIR}/tools/asset_gen.py rig  --image ref.png -o rigged.glb    # +25¢, biped only
-python3 ${ASSET_GEN_SKILL_DIR}/tools/asset_gen.py retarget --rigged rigged.glb \
-  --animation preset:biped:walk -o walk.glb                                             # 10¢ per clip
+```text
+${PYTHON_CMD} ${ASSET_GEN_SKILL_DIR}/tools/asset_gen.py glb --image ref.png -o model.glb
+${PYTHON_CMD} ${ASSET_GEN_SKILL_DIR}/tools/asset_gen.py rig --image ref.png -o rigged.glb
+${PYTHON_CMD} ${ASSET_GEN_SKILL_DIR}/tools/asset_gen.py retarget --rigged rigged.glb --animation preset:biped:walk -o walk.glb
 ```
+
+`glb` costs 30¢ default / 60¢ with `--quality hd`; `rig` adds 25¢ and is biped-only; `retarget` costs 10¢ per clip.
 
 Source image for `glb`: 3/4 elevated angle, solid white/gray background, matte finish, opaque glass, single centered subject — and **do not** rembg it (Tripo3D needs the solid bg). `rig` is biped-only and aborts if the mesh isn't humanoid; quadrupeds use plain `glb`. `retarget` reuses the rigged task id — run it once per animation against the same rigged GLB (no re-rigging). Don't assume the preset name survives into the GLB; inspect the imported clip names before wiring playback.
 
@@ -82,8 +84,8 @@ victory_celebration volleyball wait walk warm_up wave_goodbye_01/02
 
 - Jobs routinely sit at 99% with empty output for minutes. Let the default timeout run.
 - A timeout in `glb`/`rig`/`retarget` does **not** mean server failure. The task id is already saved in the `<output>.tripo.json` sidecar. **Do not resubmit — that double-charges.** Resume for free instead:
-  ```bash
-  python3 ${ASSET_GEN_SKILL_DIR}/tools/asset_gen.py resume -o model.glb
+  ```text
+  ${PYTHON_CMD} ${ASSET_GEN_SKILL_DIR}/tools/asset_gen.py resume -o model.glb
   ```
   Safe to re-run; it no-ops once complete. Delete the sidecar to force a cold start.
 
@@ -93,14 +95,25 @@ Each generation costs real money, so confirm with the user before generating. Qu
 
 ## Output and logging
 
-Each command prints JSON to stdout: `{"ok": true, "path": "...", "cost_cents": 7}`. Progress goes to stderr — redirect it to a temp file and read only on failure to keep context clean:
+Each command prints JSON to stdout: `{"ok": true, "path": "...", "cost_cents": 7}`. Progress goes to stderr. Capture stderr only when useful, using the syntax for the current host shell.
+
+POSIX shell:
 
 ```bash
 _log=$(mktemp)
-result=$(python3 ${ASSET_GEN_SKILL_DIR}/tools/asset_gen.py image --prompt "..." -o p.png 2>"$_log") || tail -20 "$_log"
+result=$(${PYTHON_CMD} ${ASSET_GEN_SKILL_DIR}/tools/asset_gen.py image --prompt "..." -o p.png 2>"$_log") || tail -20 "$_log"
 ```
 
-Generate independent images in parallel (multiple Bash calls in one message).
+PowerShell:
+
+```powershell
+$log = New-TemporaryFile
+$result = & ${PYTHON_CMD} ${ASSET_GEN_SKILL_DIR}/tools/asset_gen.py image --prompt "..." -o p.png 2> $log
+if ($LASTEXITCODE -ne 0) { Get-Content $log -Tail 20 }
+Remove-Item $log -ErrorAction SilentlyContinue
+```
+
+Generate independent images in parallel when that reduces run time; use the host shell's normal parallel/process primitives rather than assuming Bash exists.
 
 ## Visual pitfalls
 

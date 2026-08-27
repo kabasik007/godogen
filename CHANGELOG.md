@@ -1,5 +1,13 @@
 # Changelog
 
+**2026-08-27 — Native Windows support**
+- Added `publish.ps1`, a native PowerShell publisher equivalent to `publish.sh`; Windows no longer needs WSL, Bash, or `rsync` to render a Godot/Bevy/Babylon runtime for Claude Code or Codex.
+- Added `scripts/windows-preflight.ps1` to diagnose the local Codex/Godot toolchain: Python, .NET 9, Codex CLI, Git, Godot .NET/Mono, headless startup, ffmpeg, ImageMagick, and the common `GodotSharp`/portable-alias failure mode.
+- Made published asset-generation docs host-aware through the rendered `PYTHON_CMD` token, so Windows runtimes use `python` or `py -3` instead of hard-coded `python3`; added PowerShell logging examples.
+- Added native Windows capture/validation paths to the Godot, Bevy, and Babylon.js engine guides. Xvfb is now explicitly Linux-only.
+- Expanded workstation/README/project docs with Windows setup and a direct `publish.ps1 -> codex` smoke-test flow.
+- Fixed `rembg_matting.py --preview`, which referenced an out-of-scope `bg_color`; QA previews now reuse the same sampled background color used by the matting pass.
+
 **2026-07-02 — Docs-only runtime**
 - Replaced the multi-stage skill pipeline with a thin runtime: a single engine-agnostic manifest (`prompts/runtime.md`), a one-page per-engine guide, and the cross-engine `asset-gen` skill. The model plans, scaffolds, and decomposes the work itself.
 - One runtime manifest covers delivery. The agent reads how the task is framed in-run: an open-ended direction gets the live game early and checkpoints at taste/scope/cost decisions; a finished brief runs on reasonable calls and closes with a 15–20s proof recording, watched back before done. Run/show/capture mechanics live in the engine guides and serve both paths.
