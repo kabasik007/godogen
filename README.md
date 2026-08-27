@@ -17,7 +17,8 @@ A published repo is intentionally thin: a runtime manifest, a one-page engine gu
 - `prompts/runtime.md` — the runtime manifest
 - `asset-gen/` — the cross-engine asset-generation skill
 - `engines/babylon.md`, `engines/godot.md`, `engines/bevy.md` — per-engine guides
-- [publish.sh](publish.sh) — renders the runtime layout for the chosen engine and host agent
+- [publish.sh](publish.sh) — publisher for Linux/macOS
+- [publish.ps1](publish.ps1) — native PowerShell publisher for Windows
 
 Engine and host agent (Claude vs Codex) are publish-time render choices, not separate source trees.
 
@@ -34,20 +35,22 @@ Engine and host agent (Claude vs Codex) are publish-time render choices, not sep
 
 ### Prerequisites
 
-- [Godot 4](https://godotengine.org/download/) (.NET build) on `PATH` for Godot projects
+- [Godot 4](https://godotengine.org/download/) **.NET build** on `PATH` for Godot projects
+- .NET 9 SDK for current Godot C# projects
 - Rust/Cargo for Bevy projects
 - Node.js 22.12+ and npm for Babylon.js projects
 - Chrome or Chromium with hardware WebGL2 for Babylon.js browser capture
-- Python 3 with pip
-- API keys as environment variables:
+- Python 3.10+ with pip
+- `ffmpeg` for proof-video encoding; ImageMagick is used by some asset workflows
+- API keys as environment variables when paid asset generation is used:
   - `GOOGLE_API_KEY` — [Google AI Studio](https://aistudio.google.com/) for Gemini image generation
   - `XAI_API_KEY` — [xAI Grok](https://console.x.ai/home) for image/video generation
   - `TRIPO3D_API_KEY` — [Tripo3D](https://platform.tripo3d.ai/) for 3D generation
-- System packages from [setup.md](setup.md): `vulkan-tools`, `xvfb`, `ffmpeg`, `imagemagick`, plus platform-specific extras
-- Tested on Ubuntu, Debian, and macOS
 - Claude Code or Codex
 
-### Publish a game repo
+See [setup.md](setup.md) for Linux, macOS, and Windows setup details. `xvfb` and `vulkan-tools` are Linux-specific; Windows does not require Xvfb for Godot capture.
+
+### Publish a game repo — Linux/macOS
 
 Pick the engine and host agent:
 
@@ -58,6 +61,34 @@ Pick the engine and host agent:
 ```
 
 Pass `--force` to wipe existing contents at the target before re-publishing.
+
+### Publish a game repo — Windows
+
+Use native PowerShell; WSL, Bash, and `rsync` are not required:
+
+```powershell
+.\publish.ps1 -Engine godot -Agent codex -Out C:\games\my-game
+Set-Location C:\games\my-game
+codex
+```
+
+If script execution is blocked by local policy, use a process-only bypass instead of changing the machine-wide policy:
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+.\publish.ps1 -Engine godot -Agent codex -Out C:\games\my-game
+```
+
+For Godot, verify the exact environment that Codex will inherit before starting a run:
+
+```powershell
+dotnet --version
+godot --version
+godot --headless --quit
+codex --version
+```
+
+`godot --version` must report a Mono/.NET build. Merely having a Godot desktop shortcut is not enough — the CLI must be callable from the shell used to start Codex.
 
 ## Running on a server
 
