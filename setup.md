@@ -2,9 +2,61 @@
 
 Shared workstation setup for the consolidated Godogen source repo.
 
+## Windows quick path (Godot + Codex)
+
+Godogen now has a native PowerShell publish path. WSL, Bash, `rsync`, and Xvfb are not required for a normal Windows Godot run.
+
+Required for the Godot + Codex flow:
+
+- Windows 10/11 with PowerShell 5.1+ or PowerShell 7
+- Git for Windows
+- Python 3.10+
+- .NET 9 SDK
+- Godot 4 **.NET/Mono build**
+- Codex CLI
+- `ffmpeg` for proof-video encoding
+- ImageMagick (`magick`) for asset resize/crop workflows
+
+Run the repository preflight before publishing:
+
+```powershell
+.\scripts\windows-preflight.ps1
+```
+
+Then publish a Codex/Godot target:
+
+```powershell
+.\publish.ps1 -Engine godot -Agent codex -Out C:\games\my-game
+Set-Location C:\games\my-game
+codex
+```
+
+If PowerShell blocks local scripts, use a process-only bypass:
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+```
+
+Do not change machine-wide execution policy just to run Godogen.
+
 ## .NET 9 SDK
 
-Godot 4.5+ requires .NET 9.
+The current Godot C# workflow expects .NET 9.
+
+### Windows
+
+Install the .NET 9 SDK from Microsoft, or with WinGet where available:
+
+```powershell
+winget install --id Microsoft.DotNet.SDK.9 --exact
+```
+
+Verify from the same PowerShell session that will start Codex:
+
+```powershell
+dotnet --version
+dotnet --list-sdks
+```
 
 ### Linux (Ubuntu/Debian)
 
@@ -31,55 +83,84 @@ brew install dotnet@9
 
 Bevy projects require a current Rust toolchain:
 
-```bash
+```text
 rustup update stable
 cargo --version
 rustc --version
 ```
 
+The same commands work in PowerShell after installing Rust with rustup for Windows.
+
 ## Node.js And Browser
 
 Babylon.js projects require Node.js 22.12+ and npm:
 
-```bash
+```text
 node --version
 npm --version
 ```
 
-Browser capture requires Chrome or Chromium with hardware WebGL2. Install one system browser and set `CHROME_BIN` if it is not on a common path:
-
-```bash
-command -v google-chrome || command -v chromium || command -v chromium-browser
-export CHROME_BIN=/path/to/chrome
-```
+Browser capture requires Chrome or Chromium with hardware WebGL2. On Linux/macOS, set `CHROME_BIN` if the browser is not on a common path. On Windows, verify the executable with `Get-Command chrome`, `Get-Command msedge`, or use an absolute browser path in the capture script.
 
 Babylon capture prefers hardware WebGL2. A fallback to a software renderer (SwiftShader, llvmpipe, lavapipe, etc.) on a GPU-equipped host means the browser GPU path is misconfigured and worth fixing; on a GPU-less host it still captures, at reduced quality and speed.
 
 ## System Packages
+
+### Linux (Ubuntu/Debian)
 
 ```bash
 sudo apt-get install vulkan-tools xvfb ffmpeg imagemagick
 ```
 
 - **vulkan-tools** — `vulkaninfo` for GPU validation
-- **xvfb** — virtual X11 display for headless Godot/Bevy runs and capture
+- **xvfb** — virtual X11 display for headless Linux Godot/Bevy runs and capture
 - **ffmpeg** — MP4 encoding of proof videos and sprite frame extraction
 - **imagemagick** — image resize, flip, crop for sprite pipelines
 
-On macOS:
+### macOS
 
 ```bash
-brew install coreutils ffmpeg dotnet@9
+brew install coreutils ffmpeg imagemagick dotnet@9
 ```
+
+### Windows
+
+Install `ffmpeg` and ImageMagick with WinGet/Chocolatey/Scoop or their official installers, then make sure these commands work in a new PowerShell window:
+
+```powershell
+ffmpeg -version
+magick -version
+```
+
+Xvfb is a Linux-only dependency and must not be used on native Windows. Vulkan normally comes from the GPU driver; `vulkaninfo` is optional diagnostics rather than a required Windows package.
+
+ONNX Runtime GPU builds on Windows also require the Microsoft Visual C++ runtime. If background removal detects an NVIDIA GPU but cannot load the CUDA execution provider, update the NVIDIA driver/runtime dependencies or allow the tool to fall back to CPU.
 
 ## Python
 
 Requires Python 3.10+.
 
+### Linux/macOS
+
 ```bash
 python3 --version
-pip install -r asset-gen/tools/requirements.txt
-pip install google-genai
+python3 -m pip install -r asset-gen/tools/requirements.txt
+```
+
+### Windows
+
+Either `python` or the Windows Python launcher `py -3` is supported by `publish.ps1`:
+
+```powershell
+python --version
+python -m pip install -r asset-gen\tools\requirements.txt
+```
+
+or:
+
+```powershell
+py -3 --version
+py -3 -m pip install -r asset-gen\tools\requirements.txt
 ```
 
 In a published game repo, the same asset-generation requirements file lives at:
@@ -87,11 +168,31 @@ In a published game repo, the same asset-generation requirements file lives at:
 - `.claude/skills/asset-gen/tools/requirements.txt` for Claude Code
 - `.agents/skills/asset-gen/tools/requirements.txt` for Codex
 
-`google-genai` is required by `asset_gen.py` for Gemini image generation.
+The publisher renders the asset skill with the Python command appropriate to the host (`python3` on the Unix publisher; `python` or `py -3` on Windows).
 
 ## Godot (.NET edition)
 
-The **.NET edition** is required for Godot projects. The standard Godot build cannot run C# scripts.
+The **.NET/Mono edition** is required for Godot projects. The standard Godot build cannot run the C# projects generated by this runtime.
+
+### Windows
+
+WinGet provides the Mono package separately from the standard Godot package:
+
+```powershell
+winget install --id GodotEngine.GodotEngine.Mono --exact
+```
+
+After installation, open a new PowerShell window and verify:
+
+```powershell
+where.exe godot
+godot --version
+godot --headless --quit
+```
+
+The version string should include `mono`. If `godot` is not found, Codex will not be able to launch the engine even if you can open Godot from Explorer or the Start menu.
+
+If a portable/WinGet alias starts but reports `.NET: Assemblies not found` or a `GodotSharp` error, do not copy or move only `godot.exe`. The `GodotSharp` directory must remain next to the real .NET Godot executable. Use the real installed executable directory on `PATH`, or reinstall the Mono package. `scripts/windows-preflight.ps1` detects this failure mode and prints the likely installed WinGet location when possible.
 
 ### Linux
 
@@ -116,29 +217,38 @@ sudo ln -sf /Applications/Godot_mono.app/Contents/MacOS/Godot /usr/local/bin/god
 
 ### Verify
 
-```bash
-dotnet --version                 # 9.0.x
-godot --version                  # 4.x.x.stable.mono
-godot --headless --quit          # may show harmless RID warnings
+```text
+dotnet --version
+godot --version
+godot --headless --quit
 ```
 
-If `godot --headless --quit` crashes with assembly errors, check that `GodotSharp/` is next to the binary:
-
-```bash
-ls "$(dirname "$(which godot)")"/GodotSharp/
-```
+On Linux/macOS, if `godot --headless --quit` crashes with assembly errors, check that `GodotSharp/` is next to the binary. On Windows use `scripts/windows-preflight.ps1` for the equivalent check.
 
 ## API Keys
 
-Set in environment:
+Set only when paid asset generation is needed:
 
 - `GOOGLE_API_KEY` — Gemini image generation
 - `XAI_API_KEY` — xAI Grok image/video generation
 - `TRIPO3D_API_KEY` — image-to-3D conversion
 
+A first Godot/Codex smoke test can use primitive meshes and requires none of these keys.
+
 ## Verify Rendering
+
+### Linux
 
 ```bash
 VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/nvidia_icd.json vulkaninfo --summary 2>&1 | grep "deviceName"
 xvfb-run -a godot --headless --quit
 ```
+
+### Windows
+
+```powershell
+godot --headless --quit
+.\scripts\windows-preflight.ps1
+```
+
+Native Windows capture must run Godot directly; do not prepend `xvfb-run`.
