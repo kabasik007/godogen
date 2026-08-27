@@ -42,7 +42,8 @@ function Invoke-Python {
         [string[]]$Arguments
     )
 
-    & $Python.Exe @($Python.Prefix) @Arguments
+    $AllArguments = @($Python.Prefix) + $Arguments
+    & $Python.Exe @AllArguments
     if ($LASTEXITCODE -ne 0) {
         throw "Python helper failed with exit code $LASTEXITCODE."
     }
