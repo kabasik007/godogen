@@ -32,7 +32,7 @@ if ($python) {
     $pythonVersion = (& $python.Source --version 2>&1 | Out-String).Trim()
     Add-Ok "Python: $pythonVersion ($($python.Source))"
 }
-elif ($py) {
+elseif ($py) {
     $pythonVersion = (& $py.Source -3 --version 2>&1 | Out-String).Trim()
     if ($LASTEXITCODE -eq 0) {
         Add-Ok "Python: $pythonVersion via py -3 ($($py.Source))"
